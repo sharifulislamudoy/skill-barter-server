@@ -1,3 +1,4 @@
+// backend/config/db.js
 const { MongoClient, ServerApiVersion } = require('mongodb');
 
 const client = new MongoClient(process.env.DB_URI, {
@@ -8,14 +9,13 @@ const client = new MongoClient(process.env.DB_URI, {
   },
 });
 
-let usersCollection = null;
+let dbInstance = null;
 
 async function connectDB() {
-  if (usersCollection) return usersCollection;
+  if (dbInstance) return dbInstance;
   await client.connect();
-  const db = client.db('skillbarter'); // change DB name if needed
-  usersCollection = db.collection('users');
-  return usersCollection;
+  dbInstance = client.db('skillbarter'); // change DB name if needed
+  return dbInstance;
 }
 
 module.exports = { connectDB };

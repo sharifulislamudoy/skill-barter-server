@@ -1,10 +1,8 @@
-// backend/routes/adminUsers.js
 const express = require('express');
 const router = express.Router();
 const { connectDB } = require('../config/db');
 const { ObjectId } = require('mongodb');
 
-// Simple API key check (use a more robust auth in production)
 const ADMIN_KEY = process.env.ADMIN_API_KEY;
 
 router.use((req, res, next) => {
@@ -18,7 +16,8 @@ router.use((req, res, next) => {
 // GET all users (exclude passwords)
 router.get('/', async (req, res) => {
   try {
-    const users = await connectDB();
+    const db = await connectDB();
+    const users = db.collection('users');
     const allUsers = await users.find({}, { projection: { password: 0 } }).toArray();
     res.json({ users: allUsers });
   } catch (error) {
@@ -37,7 +36,8 @@ router.patch('/:id/role', async (req, res) => {
       return res.status(400).json({ message: 'Invalid role' });
     }
 
-    const users = await connectDB();
+    const db = await connectDB();
+    const users = db.collection('users');
     const result = await users.updateOne(
       { _id: new ObjectId(id) },
       { $set: { role } }
@@ -61,7 +61,8 @@ router.patch('/:id/role', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const users = await connectDB();
+    const db = await connectDB();
+    const users = db.collection('users');
     const result = await users.deleteOne({ _id: new ObjectId(id) });
 
     if (result.deletedCount === 0) {
