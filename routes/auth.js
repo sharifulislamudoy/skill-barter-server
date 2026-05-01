@@ -2,6 +2,20 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
 const { connectDB } = require('../config/db');
+const slugify = require('slugify');
+
+// Helper to generate unique slug
+async function generateUniqueSlug(baseName, db) {
+  let slug = slugify(baseName, { lower: true, strict: true });
+  let counter = 1;
+  let existing = await db.collection('users').findOne({ slug });
+  while (existing) {
+    slug = `${slugify(baseName, { lower: true, strict: true })}-${counter}`;
+    counter++;
+    existing = await db.collection('users').findOne({ slug });
+  }
+  return slug;
+}
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
@@ -20,11 +34,14 @@ router.post('/register', async (req, res) => {
     }
 
     const hashed = await bcrypt.hash(password, 10);
+    const slug = await generateUniqueSlug(name, db);
+
     const newUser = {
       name,
       email,
       password: hashed,
-      role: 'skill_member', // built-in role
+      role: 'skill_member',
+      slug,
       createdAt: new Date(),
     };
 
@@ -37,7 +54,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// POST /api/auth/login
+// POST /api/auth/login (unchanged)
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;

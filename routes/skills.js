@@ -270,4 +270,63 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// DELETE /:id/ratings/:ratingId - delete user's own rating
+router.delete('/:id/ratings/:ratingId', async (req, res) => {
+  try {
+    const { id, ratingId } = req.params;
+    const { userId } = req.body; // userId from request body (or from auth token ideally)
+    
+    if (!userId) {
+      return res.status(400).json({ message: 'userId required' });
+    }
+    
+    const db = await connectDB();
+    const ratingsCol = db.collection('ratings');
+    const skillsCol = db.collection('skills');
+    
+    // Verify rating exists and belongs to the user
+    const rating = await ratingsCol.findOne({ 
+      _id: new ObjectId(ratingId),
+      skillId: new ObjectId(id),
+      userId: new ObjectId(userId)
+    });
+    
+    if (!rating) {
+      return res.status(404).json({ message: 'Rating not found or not owned by you' });
+    }
+    
+    // Delete the rating
+    await ratingsCol.deleteOne({ _id: new ObjectId(ratingId) });
+    
+    // Recalculate average rating and total ratings for the skill
+    const aggregation = await ratingsCol.aggregate([
+      { $match: { skillId: new ObjectId(id) } },
+      {
+        $group: {
+          _id: null,
+          averageRating: { $avg: '$rating' },
+          totalRatings: { $sum: 1 }
+        }
+      }
+    ]).toArray();
+    
+    const averageRating = aggregation.length > 0 ? Math.round(aggregation[0].averageRating * 10) / 10 : 0;
+    const totalRatings = aggregation.length > 0 ? aggregation[0].totalRatings : 0;
+    
+    await skillsCol.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { averageRating, totalRatings } }
+    );
+    
+    res.json({ 
+      message: 'Rating deleted successfully',
+      averageRating,
+      totalRatings
+    });
+  } catch (error) {
+    console.error('Delete rating error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 module.exports = router;
