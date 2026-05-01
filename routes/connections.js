@@ -63,11 +63,10 @@ router.get('/status', async (req, res) => {
       ]
     });
     
-    let status = 'none'; // not connected, no request
+    let status = 'none';
     if (connection) {
       if (connection.status === 'accepted') status = 'connected';
       else if (connection.status === 'pending') {
-        // check if pending request sent by current user or to current user
         if (connection.fromUserId.toString() === userId) status = 'pending_sent';
         else status = 'pending_received';
       }
@@ -90,7 +89,6 @@ router.get('/received/:userId', async (req, res) => {
       .sort({ createdAt: -1 })
       .toArray();
     
-    // Populate sender info
     const userIds = requests.map(r => r.fromUserId);
     const users = await db.collection('users')
       .find({ _id: { $in: userIds } })
@@ -103,6 +101,65 @@ router.get('/received/:userId', async (req, res) => {
     }));
     
     res.json({ requests: enriched });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// GET /api/connections/connected/:userId – get all accepted connections
+router.get('/connected/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const db = await connectDB();
+    const connections = await db.collection('connections')
+      .find({
+        status: 'accepted',
+        $or: [
+          { fromUserId: new ObjectId(userId) },
+          { toUserId: new ObjectId(userId) }
+        ]
+      })
+      .toArray();
+    
+    // Extract the other user's ID
+    const otherUserIds = connections.map(conn => {
+      if (conn.fromUserId.toString() === userId) return conn.toUserId;
+      else return conn.fromUserId;
+    });
+    
+    const users = await db.collection('users')
+      .find({ _id: { $in: otherUserIds } })
+      .toArray();
+    
+    const userMap = new Map(users.map(u => [u._id.toString(), u]));
+    
+    const enriched = connections.map(conn => {
+      const otherId = conn.fromUserId.toString() === userId ? conn.toUserId.toString() : conn.fromUserId.toString();
+      return {
+        connectionId: conn._id,
+        user: userMap.get(otherId) || null,
+        connectedAt: conn.updatedAt || conn.createdAt
+      };
+    }).filter(item => item.user !== null);
+    
+    res.json({ connections: enriched });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// DELETE /api/connections/disconnect/:connectionId – remove a connection
+router.delete('/disconnect/:connectionId', async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+    const db = await connectDB();
+    const result = await db.collection('connections').deleteOne({ _id: new ObjectId(connectionId) });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: 'Connection not found' });
+    }
+    res.json({ message: 'Disconnected successfully' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Internal server error' });
