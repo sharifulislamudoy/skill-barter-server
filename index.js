@@ -10,6 +10,7 @@ const usersRoutes = require('./routes/users');
 const connectionsRoutes = require('./routes/connections');
 const adminLogsRoutes = require('./routes/adminLogs'); // new
 const { seedCategories } = require('./models/Category');
+const userProfileRoutes = require('./routes/userProfile');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -24,6 +25,7 @@ app.use('/api/admin/skills', adminSkillsRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/connections', connectionsRoutes);
 app.use('/api/admin/logs', adminLogsRoutes); // new
+app.use('/api/users', userProfileRoutes);
 
 app.get('/', (req, res) => {
   res.send('SkillBarter API is running 🚀');
