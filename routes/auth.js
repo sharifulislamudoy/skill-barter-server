@@ -3,8 +3,8 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const { connectDB } = require('../config/db');
 const slugify = require('slugify');
+const { logAction } = require('../utils/logger');
 
-// Helper to generate unique slug
 async function generateUniqueSlug(baseName, db) {
   let slug = slugify(baseName, { lower: true, strict: true });
   let counter = 1;
@@ -17,7 +17,6 @@ async function generateUniqueSlug(baseName, db) {
   return slug;
 }
 
-// POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -47,6 +46,16 @@ router.post('/register', async (req, res) => {
 
     const result = await users.insertOne(newUser);
     const { password: _, ...userOut } = newUser;
+    
+    // Log registration
+    await logAction({
+      type: 'user_register',
+      description: `New user registered: ${name} (${email})`,
+      userId: result.insertedId,
+      userName: name,
+      metadata: { email, role: 'skill_member' }
+    });
+    
     res.status(201).json({ message: 'Registration successful', user: { ...userOut, _id: result.insertedId } });
   } catch (error) {
     console.error(error);
@@ -54,7 +63,6 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// POST /api/auth/login (unchanged)
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -74,6 +82,15 @@ router.post('/login', async (req, res) => {
     if (!valid) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
+
+    // Log login
+    await logAction({
+      type: 'user_login',
+      description: `User logged in: ${user.name} (${user.email})`,
+      userId: user._id,
+      userName: user.name,
+      metadata: { email, role: user.role }
+    });
 
     const { password: _, ...userOut } = user;
     res.json({ message: 'Login successful', user: userOut });
