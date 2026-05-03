@@ -4,6 +4,8 @@ const bcrypt = require('bcrypt');
 const { connectDB } = require('../config/db');
 const slugify = require('slugify');
 const { logAction } = require('../utils/logger');
+const cloudinary = require('../config/cloudinary');
+const uploadImage = require('../middleware/uploadImage');
 
 async function generateUniqueSlug(baseName, db) {
   let slug = slugify(baseName, { lower: true, strict: true });
@@ -17,7 +19,7 @@ async function generateUniqueSlug(baseName, db) {
   return slug;
 }
 
-router.post('/register', async (req, res) => {
+router.post('/register', uploadImage.single('avatar'), async (req, res) => {
   try {
     const { name, email, password } = req.body;
     if (!name || !email || !password) {
@@ -35,27 +37,45 @@ router.post('/register', async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
     const slug = await generateUniqueSlug(name, db);
 
+    let avatarUrl = null;
+    let avatarPublicId = null;
+    if (req.file) {
+      const result = await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          { folder: 'skillbarter_avatars', transformation: [{ width: 200, height: 200, crop: 'fill' }] },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        uploadStream.end(req.file.buffer);
+      });
+      avatarUrl = result.secure_url;
+      avatarPublicId = result.public_id;
+    }
+
     const newUser = {
       name,
       email,
       password: hashed,
       role: 'skill_member',
       slug,
+      avatarUrl,
+      avatarPublicId,
       createdAt: new Date(),
     };
 
     const result = await users.insertOne(newUser);
     const { password: _, ...userOut } = newUser;
-    
-    // Log registration
+
     await logAction({
       type: 'user_register',
       description: `New user registered: ${name} (${email})`,
       userId: result.insertedId,
       userName: name,
-      metadata: { email, role: 'skill_member' }
+      metadata: { email, role: 'skill_member', hasAvatar: !!avatarUrl }
     });
-    
+
     res.status(201).json({ message: 'Registration successful', user: { ...userOut, _id: result.insertedId } });
   } catch (error) {
     console.error(error);
@@ -83,7 +103,6 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // Log login
     await logAction({
       type: 'user_login',
       description: `User logged in: ${user.name} (${user.email})`,
